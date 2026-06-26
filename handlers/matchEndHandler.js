@@ -74,7 +74,16 @@ export const handleMatchEnded = async ({ matchId, playerData, io }) => {
 
   } catch (err) {
     console.error("handleMatchEnded error:", err.message)
-    io.to(matchId).emit("match_result", { winnerId: null, aiReview: null })
+    // Fallback: decide by test cases so neither player sees a wrong "lost"
+    let fallbackWinner = null
+    if (matchState) {
+      const a = matchState.playerA.testsPassed || 0
+      const b = matchState.playerB.testsPassed || 0
+      fallbackWinner = a > b ? matchState.playerA.userId
+                     : b > a ? matchState.playerB.userId
+                     : "draw"
+    }
+    io.to(matchId).emit("match_result", { winnerId: fallbackWinner, aiReview: null })
   }
 }
 
