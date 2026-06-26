@@ -74,7 +74,7 @@ resultSubscriber.on("error",   (err) => console.error("Result Subscriber Error:"
 
 export const io = new Server(httpServer, {
   cors: {
-    origin:      process.env.CLIENT_URL || "http://localhost:5173",
+    origin:["https://main.d1v48houk62dts.amplifyapp.com", "http://localhost:5173"],
     credentials: true,
   }
 })
@@ -89,7 +89,7 @@ const connectDB = async () => {
 }
 connectDB()
 
-app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:5173", credentials: true }))
+app.use(cors({ origin: ["https://main.d1v48houk62dts.amplifyapp.com", "http://localhost:5173"], credentials: true }))
 app.use(express.json())
 app.use(cookieParser())
 
@@ -152,8 +152,11 @@ subscriber.on('message', async (channel, message) => {
     const socketIdA = await redis.get(`socket:${playerA.userId}`)
     const socketIdB = await redis.get(`socket:${playerB.userId}`)
 
-    const isPlayerAOnline = socketIdA && io.sockets.sockets.get(socketIdA)
-    const isPlayerBOnline = socketIdB && io.sockets.sockets.get(socketIdB)
+ //   const isPlayerAOnline = socketIdA && io.sockets.sockets.get(socketIdA)
+   // const isPlayerBOnline = socketIdB && io.sockets.sockets.get(socketIdB)
+
+const isPlayerAOnline = !!socketIdA
+const isPlayerBOnline = !!socketIdB
 
     // Cancel immediately if either player went offline before we could notify them
     if (!isPlayerAOnline || !isPlayerBOnline) {
@@ -272,3 +275,4 @@ app.use((err, req, res, next) => {
 })
 
 httpServer.listen(PORT, () => console.log(`Server running on port ${PORT}`))
+

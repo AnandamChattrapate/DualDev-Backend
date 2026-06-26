@@ -31,7 +31,6 @@ export const leaderboard = async (req, res, next) => {
 /* GET /api/leaderboard/me  — top 9 + current user's rank (auth) */
 export const leaderboardWithMe = async (req, res, next) => {
   try {
-    console.log("rateGuard called /me")
     const userId = req.user?.userId;
     const data   = await getLeaderboardWithMe(userId);
     res.json({ success: true, ...data });
