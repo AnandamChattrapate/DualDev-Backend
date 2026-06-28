@@ -179,7 +179,9 @@ export const debugActiveMatch = async (req, res, next) => {
     let allUserMatchKeys = []
     try {
       allUserMatchKeys = await matchmakingRedis.keys("user:*:match") || []
-    } catch (_) {}
+    } catch (_) {
+      /* ignore */
+    }
 
     return res.json({
       success:               true,

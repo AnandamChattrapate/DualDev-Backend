@@ -134,7 +134,9 @@ export const me = async (req, res) => {
         r = await getPlayerRank(user._id.toString())
       }
       rank = r == null ? null : r + 1
-    } catch {}
+    } catch {
+      /*  ignore */
+    }
 
     return res.status(200).json({
       success: true,

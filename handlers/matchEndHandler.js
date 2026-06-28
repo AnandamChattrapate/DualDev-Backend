@@ -12,9 +12,9 @@ export const handleMatchEnded = async ({ matchId, playerData, io }) => {
   const lockKey = `match:ended:${matchId}`
   const acquired = await matchmakingRedis.set(lockKey, '1', 'NX', 'EX', 3600)
   if (!acquired) return
-
+  let matchState = null
   try {
-    const matchState = await getMatchState(matchId)
+    matchState = await getMatchState(matchId)
     if (!matchState) return
 
     // Merge the triggering player's final code + stats into the snapshot

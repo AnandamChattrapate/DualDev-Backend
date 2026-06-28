@@ -1,4 +1,4 @@
-// import matchmakingRedis from "../config/matchmakingRedis.js";
+import matchmakingRedis from "../config/matchmakingRedis.js";
 
 export const addOnlineUser = async (
   userId

@@ -124,7 +124,9 @@ export const registerSocketHandlers = (socket, io, redis) => {
           const currentSocketId = await redis.get(`socket:${userId}`)
           if (currentSocketId !== socket.id) return
           io.to(matchId).emit("opponent_offline", { userId })
-        } catch {}
+        } catch {
+          /*  ignore */
+        }
       }, 3000)
     }
 
