@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "vitest run",
+    "lint": "eslint ."
   },
   "author": "",
   "license": "ISC",
@@ -24,9 +26,14 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.6.2",
     "nodemon": "^3.1.14",
-    "rateguard-sdk": "^1.0.0",
     "redis": "^5.12.1",
     "socket.io": "^4.8.3",
     "uuid": "^14.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.5.0",
+    "globals": "^17.7.0",
+    "vitest": "^4.1.9"
   }
 }

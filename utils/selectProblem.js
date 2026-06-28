@@ -1,6 +1,20 @@
 import UserModel from "../models/UserModel.js"
 import { ProblemModel } from "../models/ProblemModel.js"
 
+/* ────────────────────────────────────────────────────────────
+   3-tier cascade resolver for problem selection:
+     tier 1: topic + difficulty match, excluding solved problems
+     tier 2: difficulty-only match (any topic), excluding solved problems
+     tier 3: last resort — any problem at all, including solved ones,
+             so a match always gets a problem rather than none
+   Pure function (no DB/IO) so it's directly unit-testable.
+   ──────────────────────────────────────────────────────────── */
+export const resolveCascadeTier = (problems, difficultyMatches, allProblems) => {
+  if (problems.length)          return { problems, tier: "topic+difficulty" }
+  if (difficultyMatches.length) return { problems: difficultyMatches, tier: "difficulty" }
+  return { problems: allProblems, tier: "any" }
+}
+
 export const selectProblem = async (
   topic,
   difficulty,
@@ -56,7 +70,7 @@ export const selectProblem = async (
         console.log(`${userLabel} solvedProblems[${index}] =`, id)
 
         if (!id) {
-          console.log(`❌ NULL/UNDEFINED ID FOUND at ${userLabel}[${index}]`)
+          console.log(` NULL/UNDEFINED ID FOUND at ${userLabel}[${index}]`)
           return
         }
 
@@ -64,13 +78,13 @@ export const selectProblem = async (
 
           const converted = id.toString()
 
-          console.log(`✅ Converted ID:`, converted)
+          console.log(`Converted ID:`, converted)
 
           solvedIds.push(converted)
 
         } catch (err) {
 
-          console.log(`❌ FAILED converting ID at ${userLabel}[${index}]`)
+          console.log(` FAILED converting ID at ${userLabel}[${index}]`)
           console.log("VALUE:", id)
           console.log("ERROR:", err.message)
 
@@ -97,7 +111,7 @@ export const selectProblem = async (
       excludedIds: [...solvedByEither]
     })
 
-    let problems = await ProblemModel.find({
+  let problems = await ProblemModel.find({
       topic,
       difficulty,
       _id: { $nin: [...solvedByEither] }
@@ -107,28 +121,34 @@ export const selectProblem = async (
 
     // ---------------- FALLBACK 1 ----------------
 
+    let difficultyMatches = []
     if (!problems.length) {
 
       console.log("\nSTEP 2 FALLBACK")
 
-      problems = await ProblemModel.find({
+      difficultyMatches = await ProblemModel.find({
         difficulty,
         _id: { $nin: [...solvedByEither] }
       })
 
-      console.log("STEP 2 COUNT:", problems.length)
+      console.log("STEP 2 COUNT:", difficultyMatches.length)
     }
 
     // ---------------- FALLBACK 2 ----------------
 
-    if (!problems.length) {
+    let allProblems = []
+    if (problems.length === 0 && difficultyMatches.length === 0) {
 
       console.log("\nSTEP 3 FALLBACK -> FETCH ALL")
 
-      problems = await ProblemModel.find({})
+      allProblems = await ProblemModel.find({})
 
-      console.log("STEP 3 COUNT:", problems.length)
+      console.log("STEP 3 COUNT:", allProblems.length)
     }
+
+    const resolved = resolveCascadeTier(problems, difficultyMatches, allProblems)
+    problems = resolved.problems
+    console.log(`\nCASCADE TIER USED: ${resolved.tier}`)
 
     // ---------------- FINAL ----------------
 
@@ -145,7 +165,7 @@ export const selectProblem = async (
 
     if (!problems.length) {
 
-      console.log("❌ NO PROBLEMS FOUND")
+      console.log("NO PROBLEMS FOUND")
       return null
 
     }
@@ -153,7 +173,7 @@ export const selectProblem = async (
     const selectedProblem =
       problems[Math.floor(Math.random() * problems.length)]
 
-    console.log("\n✅ SELECTED PROBLEM:")
+    console.log("\nSELECTED PROBLEM:")
     console.log({
       id: selectedProblem?._id?.toString(),
       title: selectedProblem?.title,
@@ -167,7 +187,7 @@ export const selectProblem = async (
 
   } catch (error) {
 
-    console.log("\n❌ ERROR INSIDE selectProblem")
+    console.log("\n ERROR INSIDE selectProblem")
     console.log("MESSAGE:", error.message)
     console.log("STACK:", error.stack)
 

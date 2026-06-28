@@ -24,8 +24,16 @@ export const joinMatchmakingQueue = async ({ userId, username, rating, socketId,
 }
 
 // Returns all players whose rating is within ±100 of the given value
+export const RATING_WINDOW = 200
+
+export const getRatingRange = (rating, window = RATING_WINDOW) => ({
+  min: rating - window,
+  max: rating + window,
+})
+
 export const findNearbyPlayers = async (rating) => {
-  const players = await matchmakingRedis.zrangebyscore("matchmakingQueue", rating - 100, rating + 100)
+  const { min, max } = getRatingRange(rating)
+  const players = await matchmakingRedis.zrangebyscore("matchmakingQueue", min, max)
   return players.map((p) => {
     try { return JSON.parse(p) }
     catch { return { userId: p } }

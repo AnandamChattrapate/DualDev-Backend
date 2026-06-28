@@ -22,7 +22,7 @@ import UserModel from "../models/UserModel.js"
    ──────────────────────────────────────────────────────────── */
 
 const TTL_SECONDS = 60                              // refresh window: 60s
-const cacheKey    = (userId) => `user:${userId}:profile`
+export const cacheKey    = (userId) => `user:${userId}:profile`
 
 /* The fields we cache — superset of what authMiddleware + /me need so
    both can be served from a single cache entry.                       */
