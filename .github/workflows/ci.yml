@@ -1,6 +1,6 @@
 name: CI
 
-# Runs on every push and every pull request — exactly what the resume claims.
+
 on:
   push:
     branches: ["**"]
