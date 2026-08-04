@@ -73,53 +73,86 @@ export const getMatchWithTimer = async (matchId) => {
   return { ...matchState, timeLeft };
 };
 
-export const updatePlayerSubmission = async ({ matchId, userId, testsPassed, totalTests }) => {
-  const data = await matchmakingRedis.get(`match:${matchId}`);
-  if (!data) throw new Error("Match not found");
+// Redis GET-then-SET is not atomic: when both players submit around the same
+// time, the second write can be based on a stale read and clobber the first
+// player's fresh testsPassed. matchmakingRedis is a single shared connection
+// used everywhere, so WATCH/MULTI (which is per-connection, not per-caller)
+// can't isolate concurrent callers — use a short-lived spinlock instead, same
+// pattern as the match-end lock in matchEndHandler.js.
+const withMatchLock = async (matchId, mutate) => {
+  const key      = `match:${matchId}`;
+  const lockKey  = `match:lock:${matchId}`;
 
-  const matchState = JSON.parse(data);
-  const now        = Date.now();
-
-  if (matchState.playerA.userId === userId) {
-    matchState.playerA.testsPassed     = testsPassed;
-    matchState.playerA.totalTests      = totalTests;
-    matchState.playerA.submitted       = true;
-    matchState.playerA.submissionCount = (matchState.playerA.submissionCount || 0) + 1;
-    if (testsPassed === totalTests && totalTests > 0 && !matchState.playerA.timeTaken) {
-      matchState.playerA.timeTaken = Math.floor((now - matchState.startedAt) / 1000);
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const acquired = await matchmakingRedis.set(lockKey, "1", "NX", "PX", 2000);
+    if (!acquired) {
+      await new Promise((r) => setTimeout(r, 25));
+      continue;
     }
-  } else if (matchState.playerB.userId === userId) {
-    matchState.playerB.testsPassed     = testsPassed;
-    matchState.playerB.totalTests      = totalTests;
-    matchState.playerB.submitted       = true;
-    matchState.playerB.submissionCount = (matchState.playerB.submissionCount || 0) + 1;
-    if (testsPassed === totalTests && totalTests > 0 && !matchState.playerB.timeTaken) {
-      matchState.playerB.timeTaken = Math.floor((now - matchState.startedAt) / 1000);
+
+    try {
+      const data = await matchmakingRedis.get(key);
+      if (!data) throw new Error("Match not found");
+
+      const matchState = JSON.parse(data);
+      mutate(matchState);
+
+      const remainingSeconds = Math.max(60, Math.floor((matchState.endsAt - Date.now()) / 1000));
+      await matchmakingRedis.set(key, JSON.stringify(matchState), "EX", remainingSeconds);
+      return matchState;
+    } finally {
+      await matchmakingRedis.del(lockKey);
     }
   }
+  throw new Error(`withMatchLock: could not acquire lock for match ${matchId}`);
+};
 
-  // await matchmakingRedis.set(`match:${matchId}`, JSON.stringify(matchState));
-  const remainingSeconds = Math.max(60, Math.floor((matchState.endsAt - Date.now()) / 1000));
-  await matchmakingRedis.set(`match:${matchId}`, JSON.stringify(matchState), "EX", remainingSeconds);
-  return matchState;
+export const updatePlayerSubmission = async ({ matchId, userId, testsPassed, totalTests }) => {
+  return withMatchLock(matchId, (matchState) => {
+    const now = Date.now();
+
+    if (matchState.playerA.userId === userId) {
+      matchState.playerA.testsPassed     = testsPassed;
+      matchState.playerA.totalTests      = totalTests;
+      matchState.playerA.submitted       = true;
+      matchState.playerA.submissionCount = (matchState.playerA.submissionCount || 0) + 1;
+      if (testsPassed === totalTests && totalTests > 0 && !matchState.playerA.timeTaken) {
+        matchState.playerA.timeTaken = Math.floor((now - matchState.startedAt) / 1000);
+      }
+    } else if (matchState.playerB.userId === userId) {
+      matchState.playerB.testsPassed     = testsPassed;
+      matchState.playerB.totalTests      = totalTests;
+      matchState.playerB.submitted       = true;
+      matchState.playerB.submissionCount = (matchState.playerB.submissionCount || 0) + 1;
+      if (testsPassed === totalTests && totalTests > 0 && !matchState.playerB.timeTaken) {
+        matchState.playerB.timeTaken = Math.floor((now - matchState.startedAt) / 1000);
+      }
+    }
+  });
+};
+
+// Merges a player's final code/language/stats into the snapshot. Called by
+// both players' match_ended events — must not depend on who wins the
+// match-end "compute once" lock, or the loser's data is silently dropped.
+export const mergePlayerData = async ({ matchId, userId, code, language, testsPassed, submissionCount, aiUsageCount }) => {
+  return withMatchLock(matchId, (matchState) => {
+    const player = matchState.playerA.userId === userId ? matchState.playerA : matchState.playerB
+    if (code !== undefined)        player.code = code
+    if (language !== undefined)    player.language = language
+    if (testsPassed != null)       player.testsPassed = testsPassed
+    if (submissionCount != null)   player.submissionCount = submissionCount
+    if (aiUsageCount != null)      player.aiUsageCount = aiUsageCount
+  });
 };
 
 export const incrementAIUsage = async ({ matchId, userId }) => {
-  const data = await matchmakingRedis.get(`match:${matchId}`);
-  if (!data) throw new Error("Match not found");
-
-  const matchState = JSON.parse(data);
-
-  if (matchState.playerA.userId === userId) {
-    matchState.playerA.aiUsageCount = (matchState.playerA.aiUsageCount || 0) + 1;
-  } else if (matchState.playerB.userId === userId) {
-    matchState.playerB.aiUsageCount = (matchState.playerB.aiUsageCount || 0) + 1;
-  }
-
-  // await matchmakingRedis.set(`match:${matchId}`, JSON.stringify(matchState));
-  const remainingSeconds = Math.max(60, Math.floor((matchState.endsAt - Date.now()) / 1000));
-  await matchmakingRedis.set(`match:${matchId}`, JSON.stringify(matchState), "EX", remainingSeconds);
-  return matchState;
+  return withMatchLock(matchId, (matchState) => {
+    if (matchState.playerA.userId === userId) {
+      matchState.playerA.aiUsageCount = (matchState.playerA.aiUsageCount || 0) + 1;
+    } else if (matchState.playerB.userId === userId) {
+      matchState.playerB.aiUsageCount = (matchState.playerB.aiUsageCount || 0) + 1;
+    }
+  });
 };
 
 export const finishMatch = async ({ matchId, winner }) => {

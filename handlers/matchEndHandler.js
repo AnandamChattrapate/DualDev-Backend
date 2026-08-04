@@ -1,4 +1,4 @@
-import { getMatchState, finishMatch } from '../services/matchStateService.js'
+import { getMatchState, finishMatch, mergePlayerData } from '../services/matchStateService.js'
 import { MatchModel } from '../models/MatchModel.js'
 import UserModel from '../models/UserModel.js'
 import { updatePlayerRating } from '../services/leaderboardService.js'
@@ -6,6 +6,18 @@ import { invalidateUserCache } from '../services/userCache.js'
 import matchmakingRedis from '../config/matchmakingRedis.js'
 
 export const handleMatchEnded = async ({ matchId, playerData, io }) => {
+  // Both players emit match_ended (timer expiry usually fires for both, or one
+  // submits and the other's timer runs out shortly after). Merge each caller's
+  // final code/stats unconditionally and *before* the "compute once" lock below —
+  // otherwise whichever caller loses the lock race has their data silently dropped.
+  if (playerData) {
+    try {
+      await mergePlayerData({ matchId, ...playerData })
+    } catch (err) {
+      console.error("mergePlayerData error:", err.message)
+    }
+  }
+
   // Use Redis SET NX as a distributed lock so two simultaneous match_ended events
   // (e.g. both players hit the timer at the same time) only process once,
   // even across server restarts (unlike an in-memory Set).
@@ -16,18 +28,6 @@ export const handleMatchEnded = async ({ matchId, playerData, io }) => {
   try {
     matchState = await getMatchState(matchId)
     if (!matchState) return
-
-    // Merge the triggering player's final code + stats into the snapshot
-    if (playerData) {
-      const player = matchState.playerA.userId === playerData.userId
-        ? matchState.playerA
-        : matchState.playerB
-      player.code            = playerData.code
-      player.language        = playerData.language
-      player.testsPassed     = playerData.testsPassed     ?? player.testsPassed
-      player.submissionCount = playerData.submissionCount ?? player.submissionCount
-      player.aiUsageCount    = playerData.aiUsageCount    ?? player.aiUsageCount
-    }
 
     const { judgeMatch } = await import('../utils/aiJudge.js')
     const aiResult = await judgeMatch({
@@ -70,6 +70,7 @@ export const handleMatchEnded = async ({ matchId, playerData, io }) => {
     io.to(matchId).emit("match_result", {
       winnerId: aiResult.winner,
       aiReview: aiResult,
+      players:  buildPlayersPayload(matchState),
     })
 
   } catch (err) {
@@ -83,7 +84,27 @@ export const handleMatchEnded = async ({ matchId, playerData, io }) => {
                      : b > a ? matchState.playerB.userId
                      : "draw"
     }
-    io.to(matchId).emit("match_result", { winnerId: fallbackWinner, aiReview: null })
+    io.to(matchId).emit("match_result", {
+      winnerId: fallbackWinner,
+      aiReview: null,
+      players:  buildPlayersPayload(matchState),
+    })
+  }
+}
+
+// Authoritative final per-player stats, keyed by userId, so the result screen
+// doesn't have to rely on live socket events it may have missed (reload, late
+// join, dropped connection).
+const buildPlayersPayload = (matchState) => {
+  if (!matchState) return null
+  const toPayload = (p) => ({
+    testsPassed: p.testsPassed || 0,
+    totalTests:  p.totalTests  || 0,
+    language:    p.language    || null,
+  })
+  return {
+    [matchState.playerA.userId]: toPayload(matchState.playerA),
+    [matchState.playerB.userId]: toPayload(matchState.playerB),
   }
 }
 
