@@ -1,4 +1,5 @@
-import redis from '../config/matchmakingRedis.js' 
+import redis from '../config/matchmakingRedis.js'
+import UserModel from '../models/UserModel.js'
 
 const STATS_KEY = 'codejudge:stats';
 
@@ -18,16 +19,18 @@ export const getStats = async (req, res) => {
     const cutoff = Date.now() - HEARTBEAT_TIMEOUT;
     const now = Date.now();
 
-    const [playersOnline, battlesPlayed, battlesLiveNow] = await Promise.all([
+    const [playersOnline, battlesPlayed, battlesLiveNow, totalUsers] = await Promise.all([
       redis.zcount(HEARTBEAT_KEY, cutoff, '+inf'),
       redis.hget('codejudge:stats', 'battlesPlayed'),
       redis.zcount('active_matches', now, '+inf'),   // ← live matches
+      UserModel.countDocuments(),
     ]);
 
     res.json({
       playersOnline: Number(playersOnline),
       battlesPlayed: Number(battlesPlayed) || 0,
       battlesLiveNow: Number(battlesLiveNow),
+      totalUsers,
     });
   } catch (err) {
     console.error(err);

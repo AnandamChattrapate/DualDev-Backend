@@ -72,4 +72,6 @@ const matchSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+matchSchema.index({ finishedAt: -1 });
+
 export const MatchModel = mongoose.model("MatchModel", matchSchema);

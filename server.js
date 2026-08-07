@@ -17,8 +17,10 @@ import { SubmissionRouter } from './routes/SubmissionRouter.js'
 import { MatchmakingRouter } from "./routes/MatchmakingRouter.js"
 import { OnlineUsersRouter } from "./routes/OnlineUsersRouter.js"
 import { LeaderboardRouter } from "./routes/LeaderboardRouter.js"
+import insightsRoutes from './routes/insightsRoutes.js'
 import matchmakingRedis from './config/matchmakingRedis.js'
 import { registerSocketHandlers } from './socket/registerSocketHandlers.js'
+import { recordSnapshot } from './services/insightsService.js'
 
 config()
 
@@ -50,6 +52,16 @@ setInterval(async () => {
     console.error('Match cleanup error:', err.message)
   }
 }, 60_000)
+
+// Sample platform stats every 5 minutes so the insights page has a history
+// to graph. Also sample once shortly after boot so the graph isn't empty
+// for the first 5 minutes after a deploy.
+setTimeout(() => {
+  recordSnapshot().catch((err) => console.error('Stats snapshot error:', err.message))
+}, 5_000)
+setInterval(() => {
+  recordSnapshot().catch((err) => console.error('Stats snapshot error:', err.message))
+}, 5 * 60_000)
 
 // Separate Redis subscriber for match:created events (published by the matchmaking worker)
 const subscriber = new Redis({
@@ -103,6 +115,7 @@ app.use("/api/online-users", OnlineUsersRouter)
 app.use("/api/leaderboard",  LeaderboardRouter)
 app.use('/api/ai',           AIRouter)
 app.use('/api/stats',        statsRoutes)
+app.use('/api/insights',     insightsRoutes)
 
 // Authenticate socket connections using the JWT from the cookie
 io.use((socket, next) => {
