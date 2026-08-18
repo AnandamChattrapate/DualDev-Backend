@@ -81,8 +81,11 @@ const resultSubscriber = new Redis({
   password:             process.env.REDIS_PASSWORD,
   maxRetriesPerRequest: null,
 })
-resultSubscriber.on("connect", () => console.log("Result Subscriber Connected"))
-resultSubscriber.on("error",   (err) => console.error("Result Subscriber Error:", err.message))
+resultSubscriber.on("connect",      () => console.log("Result Subscriber Connected"))
+resultSubscriber.on("ready",        () => console.log("Result Subscriber Ready"))
+resultSubscriber.on("reconnecting", () => console.log("Result Subscriber Reconnecting..."))
+resultSubscriber.on("close",        () => console.log("Result Subscriber Connection Closed"))
+resultSubscriber.on("error",        (err) => console.error("Result Subscriber Error:", err.message))
 
 export const io = new Server(httpServer, {
   cors: {
@@ -233,12 +236,14 @@ const isPlayerBOnline = !!socketIdB
 })
 
 // Fired by the judge worker when a run or submission result is ready
-resultSubscriber.subscribe("result:ready", (err) => {
+resultSubscriber.subscribe("result:ready", (err, count) => {
   if (err) console.error("Result subscribe error:", err.message)
+  else console.log(`Result Subscriber subscribed to result:ready (${count} channel(s) active)`)
 })
 
 resultSubscriber.on("message", async (channel, message) => {
   if (channel !== "result:ready") return
+  console.log("result:ready received:", message)
   try {
     const { jobId, matchId, userId, verdict, testsPassed, totalTests, results, totalExecutionTime } = JSON.parse(message)
 
@@ -251,7 +256,8 @@ resultSubscriber.on("message", async (channel, message) => {
 
     try {
       const { updatePlayerSubmission } = await import('./services/matchStateService.js')
-      await updatePlayerSubmission({ matchId, userId, testsPassed, totalTests })
+      const updated = await updatePlayerSubmission({ matchId, userId, testsPassed, totalTests })
+      console.log(`updatePlayerSubmission OK for match ${matchId}, user ${userId}: testsPassed=${testsPassed}/${totalTests}`, JSON.stringify(updated))
     } catch (err) {
       console.error("updatePlayerSubmission error:", err.message)
     }
