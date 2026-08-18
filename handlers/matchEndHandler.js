@@ -91,16 +91,19 @@ export const handleMatchEnded = async ({ matchId, playerData, io }) => {
 
     const elapsed = (Date.now() - matchState.startedAt) / 1000
 
-    await Promise.all([
+    const [statsA, statsB] = await Promise.all([
       updateUserStats(matchState.playerA, aiResult.winner, elapsed, matchState.problem?.id),
       updateUserStats(matchState.playerB, aiResult.winner, elapsed, matchState.problem?.id),
     ])
-    console.log(`[matchEnd:${matchId}] updateUserStats OK for both players`)
+    console.log(`[matchEnd:${matchId}] updateUserStats: A=${JSON.stringify(statsA)} B=${JSON.stringify(statsB)}`)
 
     const payload = {
       winnerId: aiResult.winner,
       aiReview: aiResult,
-      players:  buildPlayersPayload(matchState),
+      players:  buildPlayersPayload(matchState, {
+        [matchState.playerA.userId]: statsA,
+        [matchState.playerB.userId]: statsB,
+      }),
     }
     console.log(`[matchEnd:${matchId}] emitting match_result:`, JSON.stringify(payload))
     io.to(matchId).emit("match_result", payload)
@@ -128,13 +131,22 @@ export const handleMatchEnded = async ({ matchId, playerData, io }) => {
 
 // Authoritative final per-player stats, keyed by userId, so the result screen
 // doesn't have to rely on live socket events it may have missed (reload, late
-// join, dropped connection).
-const buildPlayersPayload = (matchState) => {
+// join, dropped connection), a client-side rating snapshot that can drift
+// from the server's true value, or the opponent object set at match-start
+// time (which some join paths — e.g. friend-room matches — may populate
+// incompletely). statsByUserId is null/missing per-key when updateUserStats
+// never ran (e.g. the catch-block fallback path) — the frontend falls back
+// to its own state for whatever's missing.
+const buildPlayersPayload = (matchState, statsByUserId = {}) => {
   if (!matchState) return null
   const toPayload = (p) => ({
-    testsPassed: p.testsPassed || 0,
-    totalTests:  p.totalTests  || 0,
-    language:    p.language    || null,
+    testsPassed:  p.testsPassed || 0,
+    totalTests:   p.totalTests  || 0,
+    language:     p.language    || null,
+    code:         p.code        || null,
+    username:     statsByUserId[p.userId]?.username     ?? null,
+    ratingBefore: statsByUserId[p.userId]?.ratingBefore ?? null,
+    ratingAfter:  statsByUserId[p.userId]?.ratingAfter  ?? null,
   })
   return {
     [matchState.playerA.userId]: toPayload(matchState.playerA),
@@ -142,10 +154,16 @@ const buildPlayersPayload = (matchState) => {
   }
 }
 
+// Returns { username, ratingBefore, ratingAfter } on success, null if the
+// update couldn't be applied (missing user, save failure, etc.) — callers
+// must treat null as "no authoritative data available" rather than assuming 0.
 const updateUserStats = async (player, winnerId, elapsed, problemId) => {
   try {
     const user = await UserModel.findById(player.userId)
-    if (!user) return
+    if (!user) return null
+
+    const username = user.username
+    const ratingBefore = user.rating || 1000
 
     const won       = winnerId === player.userId
     const draw      = winnerId === "draw"
@@ -198,7 +216,10 @@ const updateUserStats = async (player, winnerId, elapsed, problemId) => {
 
     await invalidateUserCache(player.userId)
 
+    return { username, ratingBefore, ratingAfter: user.rating }
+
   } catch (err) {
     console.error("updateUserStats error:", err.message)
+    return null
   }
 }
