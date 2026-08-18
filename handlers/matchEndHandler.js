@@ -32,6 +32,15 @@ export const handleMatchEnded = async ({ matchId, playerData, io }) => {
   }
   console.log(`[matchEnd:${matchId}] lock acquired, proceeding with match-end processing`)
 
+  // Both players' match_ended events typically arrive within milliseconds of
+  // each other (same timer hitting 0, or one manual end followed by the
+  // other's handler). mergePlayerData for the second caller can still be
+  // in flight when the first caller reaches this point — a plain read here
+  // isn't synchronized against it, so without this, the read can win the
+  // race and permanently miss the other player's final testsPassed/language.
+  // A short settle window lets a near-simultaneous sibling call land first.
+  await new Promise((r) => setTimeout(r, 500))
+
   let matchState = null
   try {
     const ttl = await matchmakingRedis.ttl(`match:${matchId}`)
@@ -167,11 +176,14 @@ const updateUserStats = async (player, winnerId, elapsed, problemId) => {
     }
 
     // Use the problem ID passed from matchState, not from playerData (which never had it)
+    // solvedProblems can contain stray null/undefined entries from earlier data
+    // issues — filter them out before calling .toString(), or this throws and
+    // aborts the whole update before user.save() ever runs.
     if (
       problemId &&
       player.testsPassed === player.totalTests &&
       player.totalTests > 0 &&
-      !user.solvedProblems?.map(id => id.toString()).includes(problemId.toString())
+      !(user.solvedProblems || []).some((id) => id && id.toString() === problemId.toString())
     ) {
       user.solvedProblems.push(problemId)
     }
