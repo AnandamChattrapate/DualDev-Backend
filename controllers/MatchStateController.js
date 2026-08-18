@@ -34,12 +34,21 @@ export const fetchMatchState = async (req, res, next) => {
     const userId = req.user.userId
 
     const match = await getMatchState(matchId)
-    if (!match) return res.status(404).json({ success: false, message: "Match not found" })
+    if (!match) {
+      // This is the Result.jsx fallback fetch (fires when the match_result
+      // socket event was missed). A 404 here means the Redis match:{id} key
+      // is gone by the time the result page asks for it — log loudly, this
+      // is the same symptom the result-page bug traces back to.
+      console.error(`[fetchMatchState] match:${matchId} NOT FOUND in Redis (requested by user ${userId})`)
+      return res.status(404).json({ success: false, message: "Match not found" })
+    }
 
     if (!requirePlayer(match, userId)) {
+      console.error(`[fetchMatchState] match:${matchId} found but user ${userId} is not a player in it`)
       return res.status(403).json({ success: false, message: "Not your match" })
     }
 
+    console.log(`[fetchMatchState] match:${matchId} found, status=${match.status}, winner=${match.winner}`)
     res.json({ success: true, match })
   } catch (err) {
     next(err)

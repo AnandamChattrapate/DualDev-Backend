@@ -1,7 +1,7 @@
 import matchmakingRedis from "../config/matchmakingRedis.js";
 
 const MATCH_DURATION_SECONDS = {
-  Easy:   15 * 60 + 25,   // 925
+  Easy:   2 * 60 + 10,    // 130 — TEMP: shortened for faster testing of the match-end pipeline, revert to 925 after
   Medium: 25 * 60 + 15,   // 1515
   Hard:   40 * 60 + 25,   // 2425
 };
@@ -98,7 +98,7 @@ const withMatchLock = async (matchId, mutate) => {
 
     try {
       const data = await matchmakingRedis.get(key);
-      if (!data) throw new Error("Match not found");
+      if (!data) throw new Error(`Match not found: ${matchId}`);
 
       const matchState = JSON.parse(data);
       mutate(matchState);
@@ -170,7 +170,7 @@ export const incrementAIUsage = async ({ matchId, userId }) => {
 
 export const finishMatch = async ({ matchId, winner }) => {
   const data = await matchmakingRedis.get(`match:${matchId}`);
-  if (!data) throw new Error("Match not found");
+  if (!data) throw new Error(`Match not found: ${matchId}`);
 
   const matchState    = JSON.parse(data);
   matchState.status   = "finished";
