@@ -7,7 +7,7 @@ const callGroqAI = async ({ messages }) => {
   const groq = getGroqClient()
   const completion = await groq.chat.completions.create({
     messages,
-    model:       "llama-3.3-70b-versatile",
+    model:       "openai/gpt-oss-120b", // llama-3.3-70b-versatile was retired from this account (404 model_not_found)
     temperature: 0.3,
   })
   return completion.choices[0]?.message?.content || ""
