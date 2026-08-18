@@ -89,7 +89,7 @@ resultSubscriber.on("error",        (err) => console.error("Result Subscriber Er
 
 export const io = new Server(httpServer, {
   cors: {
-    origin:["https://main.d1v48houk62dts.amplifyapp.com", "http://localhost:5173"],
+    origin:["https://dualdev.in", "https://www.dualdev.in", "http://localhost:5173"],
     credentials: true,
   }
 })
@@ -104,7 +104,7 @@ const connectDB = async () => {
 }
 connectDB()
 
-app.use(cors({ origin: ["https://main.d1v48houk62dts.amplifyapp.com", "http://localhost:5173"], credentials: true }))
+app.use(cors({ origin: ["https://dualdev.in", "https://www.dualdev.in", "http://localhost:5173"], credentials: true }))
 app.use(express.json())
 app.use(cookieParser())
 
