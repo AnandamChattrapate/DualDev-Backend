@@ -1,4 +1,5 @@
 import { handleMatchEnded } from '../handlers/matchEndHandler.js'
+import { MATCH_END_GRACE_SECONDS } from '../services/matchStateService.js'
 
 export const registerSocketHandlers = (socket, io, redis) => {
   const userId = socket.user?.userId
@@ -69,7 +70,7 @@ export const registerSocketHandlers = (socket, io, redis) => {
           if (matchRaw) {
             const matchState = JSON.parse(matchRaw)
             matchState.problem.id = problemId.toString()
-            const ttl = Math.max(60, Math.floor((matchState.endsAt - Date.now()) / 1000))
+            const ttl = Math.max(60, Math.floor((matchState.endsAt - Date.now()) / 1000) + MATCH_END_GRACE_SECONDS)
             await redis.set(`match:${matchId}`, JSON.stringify(matchState), "EX", ttl)
           }
         }

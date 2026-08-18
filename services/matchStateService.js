@@ -6,6 +6,12 @@ const MATCH_DURATION_SECONDS = {
   Hard:   40 * 60 + 25,   // 2425
 };
 
+// Match-end processing (client timer hitting 0 → match_ended socket event →
+// server merge/lock/judge/emit) needs the Redis match key to still exist well
+// past the match's natural endsAt. A tight buffer here is a real race: a
+// mid-match submission's TTL refresh should never expire close to endsAt.
+export const MATCH_END_GRACE_SECONDS = 600; // 10 minutes past endsAt
+
 export const createMatchState = async ({ matchId, playerA, playerB, problem }) => {
   const duration = MATCH_DURATION_SECONDS[problem?.difficulty] || 925;
   const endsAt = Date.now() + duration * 1000;
@@ -42,11 +48,11 @@ export const createMatchState = async ({ matchId, playerA, playerB, problem }) =
     endsAt,
   };
 
-  await matchmakingRedis.set(`match:${matchId}`, JSON.stringify(matchState),"EX",duration + 60);
+  await matchmakingRedis.set(`match:${matchId}`, JSON.stringify(matchState),"EX",duration + MATCH_END_GRACE_SECONDS);
   await matchmakingRedis.zadd('active_matches', endsAt, matchId);
 
   /* userId → matchId index for cheap "are you mid-match?" lookup */
-  const ttl = duration + 60;
+  const ttl = duration + MATCH_END_GRACE_SECONDS;
   if (playerA)
     await matchmakingRedis.set(`user:${playerA}:match`,  matchId, "EX", ttl);
   if (playerB)
@@ -97,7 +103,14 @@ const withMatchLock = async (matchId, mutate) => {
       const matchState = JSON.parse(data);
       mutate(matchState);
 
-      const remainingSeconds = Math.max(60, Math.floor((matchState.endsAt - Date.now()) / 1000));
+      // Grace period is added on top of "time until endsAt", not used as a
+      // bare floor — otherwise a submission made early in the match still
+      // sets a TTL that expires right at endsAt, the exact race this guards
+      // against.
+      const remainingSeconds = Math.max(
+        60,
+        Math.floor((matchState.endsAt - Date.now()) / 1000) + MATCH_END_GRACE_SECONDS
+      );
       await matchmakingRedis.set(key, JSON.stringify(matchState), "EX", remainingSeconds);
       return matchState;
     } finally {
