@@ -1,24 +1,32 @@
 import matchmakingRedis from "../config/matchmakingRedis.js";
 import UserModel from "../models/UserModel.js";
 import { MatchModel } from "../models/MatchModel.js";
+import { ProblemModel } from "../models/ProblemModel.js";
 import { StatsSnapshotModel } from "../models/StatsSnapshotModel.js";
 
 const HEARTBEAT_KEY = "online_heartbeats";
 const HEARTBEAT_TIMEOUT = 10_000;
+/** Supported judge languages — keep in sync with LanguageSelect / statsController. */
+const LANGUAGE_COUNT = 3;
 
 const readLiveCounts = async () => {
   const now = Date.now();
-  const [onlineCount, liveMatches, totalUsers, totalMatches] = await Promise.all([
+  const [onlineCount, liveMatches, totalUsers, totalMatches, problems, topics] = await Promise.all([
     matchmakingRedis.zcount(HEARTBEAT_KEY, now - HEARTBEAT_TIMEOUT, "+inf"),
     matchmakingRedis.zcount("active_matches", now, "+inf"),
     UserModel.countDocuments(),
     MatchModel.countDocuments(),
+    ProblemModel.countDocuments(),
+    ProblemModel.distinct("topic"),
   ]);
   return {
     onlineCount: Number(onlineCount),
     liveMatches: Number(liveMatches),
     totalUsers,
     totalMatches,
+    languages: LANGUAGE_COUNT,
+    problems: Number(problems) || 0,
+    topics: Array.isArray(topics) ? topics.length : 0,
   };
 };
 
@@ -46,6 +54,9 @@ export const getSummary = async () => {
     matchesToday,
     playersOnline:   live.onlineCount,
     liveMatchesNow:  live.liveMatches,
+    languages:       live.languages,
+    problems:        live.problems,
+    topics:          live.topics,
     resultBreakdown: { decisive, draws },
   };
 };

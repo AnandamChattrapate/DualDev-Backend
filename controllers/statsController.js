@@ -1,7 +1,10 @@
 import redis from '../config/matchmakingRedis.js'
 import UserModel from '../models/UserModel.js'
+import { ProblemModel } from '../models/ProblemModel.js'
 
 const STATS_KEY = 'codejudge:stats';
+/** Supported judge languages — keep in sync with LanguageSelect. */
+const LANGUAGE_COUNT = 3;
 
 // Initialize defaults on startup (call this once in server.js)
 export const initializeStats = async () => {
@@ -19,11 +22,13 @@ export const getStats = async (req, res) => {
     const cutoff = Date.now() - HEARTBEAT_TIMEOUT;
     const now = Date.now();
 
-    const [playersOnline, battlesPlayed, battlesLiveNow, totalUsers] = await Promise.all([
+    const [playersOnline, battlesPlayed, battlesLiveNow, totalUsers, problems, topics] = await Promise.all([
       redis.zcount(HEARTBEAT_KEY, cutoff, '+inf'),
       redis.hget('codejudge:stats', 'battlesPlayed'),
       redis.zcount('active_matches', now, '+inf'),   // ← live matches
       UserModel.countDocuments(),
+      ProblemModel.countDocuments(),
+      ProblemModel.distinct('topic'),
     ]);
 
     res.json({
@@ -31,6 +36,9 @@ export const getStats = async (req, res) => {
       battlesPlayed: Number(battlesPlayed) || 0,
       battlesLiveNow: Number(battlesLiveNow),
       totalUsers,
+      languages: LANGUAGE_COUNT,
+      problems: Number(problems) || 0,
+      topics: Array.isArray(topics) ? topics.length : 0,
     });
   } catch (err) {
     console.error(err);

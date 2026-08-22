@@ -37,8 +37,20 @@ export const registerSocketHandlers = (socket, io, redis) => {
     socket.to(matchId).emit("opponent_tc_update", { userId, testsPassed, totalTests })
   })
 
-  socket.on("emote", ({ matchId, emote }) => {
-    socket.to(matchId).emit("opponent_emote", { emote })
+  /* In-match chat. Messages are relayed to the opponent and never stored —
+     no history, no replay on reconnect. Length-capped and rate-limited so a
+     client can't flood the room. */
+  let lastChatAt = 0
+  socket.on("chat", ({ matchId, text }) => {
+    if (!matchId || typeof text !== "string") return
+    const body = text.trim().slice(0, 300)
+    if (!body) return
+
+    const now = Date.now()
+    if (now - lastChatAt < 400) return
+    lastChatAt = now
+
+    socket.to(matchId).emit("opponent_chat", { userId, text: body, ts: now })
   })
 
   socket.on("match_ended", async ({ matchId, userId: senderId, code, language, testsPassed, submissionCount, aiUsageCount }) => {

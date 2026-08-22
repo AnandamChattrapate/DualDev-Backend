@@ -1,7 +1,7 @@
 import matchmakingRedis from "../config/matchmakingRedis.js";
 
 const MATCH_DURATION_SECONDS = {
-  Easy:   2 * 60 + 10,    // 130 — TEMP: shortened for faster testing of the match-end pipeline, revert to 925 after
+  Easy:   15 * 60 + 25,   // 925
   Medium: 25 * 60 + 15,   // 1515
   Hard:   40 * 60 + 25,   // 2425
 };
