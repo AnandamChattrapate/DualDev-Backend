@@ -44,6 +44,17 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+
+    /* Learned quote-style preferences (see phrases feature). Every score
+       stays within [-1, 1] and starts at 0 for new users. */
+    preferences: {
+      competitive: { type: Number, default: 0, min: -1, max: 1 },
+      friend:      { type: Number, default: 0, min: -1, max: 1 },
+      funny:       { type: Number, default: 0, min: -1, max: 1 },
+      cold:        { type: Number, default: 0, min: -1, max: 1 },
+      genz:        { type: Number, default: 0, min: -1, max: 1 },
+      short:       { type: Number, default: 0, min: -1, max: 1 },
+    },
     solvedProblems: [
       {
         type: mongoose.Schema.Types.ObjectId,

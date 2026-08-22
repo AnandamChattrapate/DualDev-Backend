@@ -86,7 +86,7 @@ const problemSchema = new mongoose.Schema(
     sampleTestCases: [
       {
         id: {
-          type: Number,
+          type: String,
           required: [true, "Sample testcase ID is required"],
         },
 
@@ -110,7 +110,7 @@ const problemSchema = new mongoose.Schema(
     hiddenTestCases: [
       {
         id: {
-          type: Number,
+          type: String,
           required: [true, "Hidden testcase ID is required"],
         },
 

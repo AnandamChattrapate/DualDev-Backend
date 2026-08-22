@@ -17,6 +17,7 @@ import { SubmissionRouter } from './routes/SubmissionRouter.js'
 import { MatchmakingRouter } from "./routes/MatchmakingRouter.js"
 import { OnlineUsersRouter } from "./routes/OnlineUsersRouter.js"
 import { LeaderboardRouter } from "./routes/LeaderboardRouter.js"
+import { PhraseRouter } from "./routes/PhraseRouter.js"
 import insightsRoutes from './routes/insightsRoutes.js'
 import matchmakingRedis from './config/matchmakingRedis.js'
 import { registerSocketHandlers } from './socket/registerSocketHandlers.js'
@@ -117,6 +118,7 @@ app.use("/api/matchmaking",  MatchmakingRouter)
 app.use("/api/online-users", OnlineUsersRouter)
 app.use("/api/leaderboard",  LeaderboardRouter)
 app.use('/api/ai',           AIRouter)
+app.use('/api/phrases',      PhraseRouter)
 app.use('/api/stats',        statsRoutes)
 app.use('/api/insights',     insightsRoutes)
 
