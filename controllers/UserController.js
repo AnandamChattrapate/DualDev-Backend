@@ -74,10 +74,16 @@ export const login = async (req, res) => {
       { expiresIn: "7d" }
     );
 
+    /* Frontend and backend are always separate origins (Vercel + api.dualdev.in,
+       and localhost:5173 + a local backend in dev), so this cookie is always
+       cross-site — it must be SameSite=None; Secure to survive a page reload,
+       regardless of NODE_ENV (which nothing in this deployment ever sets).
+       Chrome/Firefox treat localhost as a secure context, so this also works
+       for local development over http://localhost. */
     res.cookie("token", token, {
       httpOnly: true,
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      secure:   process.env.NODE_ENV === "production",
+      sameSite: "none",
+      secure:   true,
       maxAge:   7 * 24 * 60 * 60 * 1000,
     });
 
@@ -162,10 +168,12 @@ export const me = async (req, res) => {
 
 // ── NEW — logout ──
 export const logout = async (req, res) => {
+  // Must match the attributes used in login()'s res.cookie() exactly, or the
+  // browser won't recognize this as clearing the same cookie.
   res.clearCookie("token", {
     httpOnly: true,
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    secure:   process.env.NODE_ENV === "production",
+    sameSite: "none",
+    secure:   true,
   })
   return res.status(200).json({ success: true, message: "Logged out" })
 }
