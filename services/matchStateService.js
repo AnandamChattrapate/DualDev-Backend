@@ -1,9 +1,12 @@
 import matchmakingRedis from "../config/matchmakingRedis.js";
 
+// TEMP: shortened for manual end-to-end testing of the match-result pipeline.
+// Revert to 925/1515/2425 (and revert frontend matchStore.js's matching
+// MATCH_DURATION) once testing is done.
 const MATCH_DURATION_SECONDS = {
-  Easy:   15 * 60 + 25,   // 925
-  Medium: 25 * 60 + 15,   // 1515
-  Hard:   40 * 60 + 25,   // 2425
+  Easy:   120,   // was 925
+  Medium: 180,   // was 1515
+  Hard:   300,   // was 2425
 };
 
 // Match-end processing (client timer hitting 0 → match_ended socket event →
