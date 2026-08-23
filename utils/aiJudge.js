@@ -27,6 +27,23 @@ const callGroqAI = async ({ messages }) => {
 }
 
 export const judgeMatch = async ({ playerA, playerB, problem }) => {
+  /* Neither player got a single test case green — there is nothing to
+     separate them on, so this is a draw by definition. Decided here rather
+     than left to the model, which will happily pick a "winner" on code style
+     alone and hand someone a rating win for a solution that never worked.
+     Also saves a pointless API call. */
+  if (!(playerA.testsPassed > 0) && !(playerB.testsPassed > 0)) {
+    return {
+      winner:          "draw",
+      playerAId:       playerA.userId,
+      playerBId:       playerB.userId,
+      reasoning:       "Neither player passed a test case, so the match is a draw.",
+      playerAReview:   { strengths: "", improvements: "", complexity: "" },
+      playerBReview:   { strengths: "", improvements: "", complexity: "" },
+      optimalSolution: "",
+    }
+  }
+
   try {
     const prompt = `You are a competitive programming judge. Evaluate these two solutions and decide the winner.
 

@@ -123,10 +123,25 @@ export const handleMatchEnded = async ({ matchId, playerData, io }) => {
                      : b > a ? matchState.playerB.userId
                      : "draw"
     }
+    // updateUserStats never ran on this path, so it supplied no usernames —
+    // without them the result screen renders the opponent as "Unknown".
+    // Look them up directly; a failure here must not block the emit.
+    let names = {}
+    if (matchState) {
+      try {
+        const docs = await UserModel.find(
+          { _id: { $in: [matchState.playerA.userId, matchState.playerB.userId] } },
+          "username"
+        )
+        names = Object.fromEntries(docs.map((d) => [d._id.toString(), { username: d.username }]))
+      } catch (nameErr) {
+        console.error(`[matchEnd:${matchId}] username lookup failed:`, nameErr.message)
+      }
+    }
     const payload = {
       winnerId: fallbackWinner,
       aiReview: null,
-      players:  buildPlayersPayload(matchState),
+      players:  buildPlayersPayload(matchState, names),
     }
     console.log(`[matchEnd:${matchId}] emitting fallback match_result:`, JSON.stringify(payload))
     io.to(matchId).emit("match_result", payload)
