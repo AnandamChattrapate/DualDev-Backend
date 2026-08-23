@@ -104,6 +104,7 @@ export const fetchMatchResult = async (req, res, next) => {
           totalTests:  p.totalTests  || 0,
           language:    p.language    || null,
           code:        p.code        || null,
+          timeTaken:   p.timeTaken   ?? null,
         }
       }
     }

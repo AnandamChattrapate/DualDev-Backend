@@ -163,6 +163,9 @@ const buildPlayersPayload = (matchState, statsByUserId = {}) => {
     totalTests:   p.totalTests  || 0,
     language:     p.language    || null,
     code:         p.code        || null,
+    // Seconds from match start to the submission that went fully green.
+    // Null when they never passed everything — the client renders a dash.
+    timeTaken:    p.timeTaken   ?? null,
     username:     statsByUserId[p.userId]?.username     ?? null,
     ratingBefore: statsByUserId[p.userId]?.ratingBefore ?? null,
     ratingAfter:  statsByUserId[p.userId]?.ratingAfter  ?? null,
