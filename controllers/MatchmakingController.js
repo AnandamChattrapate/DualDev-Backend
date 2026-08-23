@@ -5,7 +5,6 @@ import {
   getQueueCount,
 } from "../services/matchmakingService.js"
 import UserModel from "../models/UserModel.js"
-import { createMatchState } from "../services/matchStateService.js"
 import matchmakingRedis from "../config/matchmakingRedis.js"
 import { io, redis } from "../server.js"
 
@@ -135,43 +134,26 @@ export const joinRoom = async (req, res, next) => {
 
     const matchId = `match-${Date.now()}`
 
-    await createMatchState({
+    // Don't create match state or start any countdown yet — both players
+    // still need to accept. match:created triggers the same pending-match +
+    // match_found + accept_match flow ranked matchmaking uses; match state
+    // only gets created once both have actually agreed to play (see
+    // accept_match in registerSocketHandlers.js).
+    room.status = "started"
+    await matchmakingRedis.set(`room:${roomId}`, JSON.stringify(room), "EX", 60)
+
+    await matchmakingRedis.publish("match:created", JSON.stringify({
       matchId,
-      playerA: room.playerA.userId,
-      playerB: room.playerB.userId,
-      problem: { id: null, title: "", difficulty: room.difficulty }
-    })
+      playerA: { userId: room.playerA.userId, username: room.playerA.username, rating: room.playerA.rating },
+      playerB: { userId: room.playerB.userId, username: room.playerB.username, rating: room.playerB.rating },
+      problem:    null,
+      topic:      room.topic,
+      difficulty: room.difficulty,
+      mode:       "friend",
+    }))
 
-    const countdown = 5
-    const socketIdA = await redis.get(`socket:${room.playerA.userId}`)
-    const socketIdB = resolvedSocketIdB
+    console.log(`Published match:created for friend match — ${matchId}`)
 
-    if (socketIdA) io.to(socketIdA).emit("match_starting", { matchId, seconds: countdown })
-    io.to(socketIdB).emit("match_starting", { matchId, seconds: countdown })
-
-    console.log(`Countdown started for room ${roomId} — match ${matchId} in ${countdown}s`)
-
-    setTimeout(async () => {
-      try {
-        room.status = "started"
-        await matchmakingRedis.set(`room:${roomId}`, JSON.stringify(room), "EX", 60)
-
-        await matchmakingRedis.publish("match:created", JSON.stringify({
-          matchId,
-          playerA: { userId: room.playerA.userId, username: room.playerA.username, rating: room.playerA.rating },
-          playerB: { userId: room.playerB.userId, username: room.playerB.username, rating: room.playerB.rating },
-          problem:    null,
-          topic:      room.topic,
-          difficulty: room.difficulty,
-          mode:       "friend",
-        }))
-
-        console.log(`Published match:created for friend match — ${matchId}`)
-      } catch (err) {
-        console.error("Error publishing friend match:", err.message)
-      }
-    }, countdown * 1000)
-
-    return res.status(200).json({ success: true, message: "Joined room — match starting in 5 seconds", matchId })
+    return res.status(200).json({ success: true, message: "Joined room — waiting for both players to accept", matchId })
   } catch (err) { next(err) }
 }

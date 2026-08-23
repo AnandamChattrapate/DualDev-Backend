@@ -1,5 +1,10 @@
 import { handleMatchEnded } from '../handlers/matchEndHandler.js'
-import { MATCH_END_GRACE_SECONDS } from '../services/matchStateService.js'
+import { MATCH_END_GRACE_SECONDS, createMatchState } from '../services/matchStateService.js'
+
+// Both players see this 5-4-3-2-1 overlay after accepting, before either one
+// is actually navigated into the match — gives the "starting…" moment its
+// own beat instead of jumping straight from the accept dialog to the editor.
+const START_COUNTDOWN_SECONDS = 5
 
 export const registerSocketHandlers = (socket, io, redis) => {
   const userId = socket.user?.userId
@@ -92,28 +97,46 @@ export const registerSocketHandlers = (socket, io, redis) => {
       if (pending.acceptedBy.length === 2) {
         await redis.del(`pending:${matchId}`)
 
-        // Write the problem ID into match state so new-browser restore can find the full problem
+        // Ranked matches already have match:{matchId} — the matchmaking
+        // worker creates it before publishing match:created. Friend-room
+        // matches don't (joinRoom no longer creates it eagerly, so a
+        // declined/expired invite never leaves a live match behind); create
+        // it now that both sides have actually agreed to play.
         const problemId = pending.problem?._id || pending.problem?.id
-        if (problemId) {
-          const matchRaw = await redis.get(`match:${matchId}`)
-          if (matchRaw) {
-            const matchState = JSON.parse(matchRaw)
-            matchState.problem.id = problemId.toString()
-            const ttl = Math.max(60, Math.floor((matchState.endsAt - Date.now()) / 1000) + MATCH_END_GRACE_SECONDS)
-            await redis.set(`match:${matchId}`, JSON.stringify(matchState), "EX", ttl)
-          }
+        const matchRaw = await redis.get(`match:${matchId}`)
+        if (!matchRaw) {
+          await createMatchState({
+            matchId,
+            playerA: pending.playerA.userId,
+            playerB: pending.playerB.userId,
+            problem: pending.problem,
+          })
+        } else if (problemId) {
+          // Write the problem ID into match state so new-browser restore can find the full problem
+          const matchState = JSON.parse(matchRaw)
+          matchState.problem.id = problemId.toString()
+          const ttl = Math.max(60, Math.floor((matchState.endsAt - Date.now()) / 1000) + MATCH_END_GRACE_SECONDS)
+          await redis.set(`match:${matchId}`, JSON.stringify(matchState), "EX", ttl)
         }
 
-        io.to(pending.playerA.socketId).emit("match_accepted", {
+        const payloadForA = {
           matchId,
           opponent: { userId: pending.playerB.userId, username: pending.playerB.username, rating: pending.playerB.rating },
           problem:  pending.problem,
-        })
-        io.to(pending.playerB.socketId).emit("match_accepted", {
+        }
+        const payloadForB = {
           matchId,
           opponent: { userId: pending.playerA.userId, username: pending.playerA.username, rating: pending.playerA.rating },
           problem:  pending.problem,
-        })
+        }
+
+        io.to(pending.playerA.socketId).emit("match_starting", { matchId, seconds: START_COUNTDOWN_SECONDS })
+        io.to(pending.playerB.socketId).emit("match_starting", { matchId, seconds: START_COUNTDOWN_SECONDS })
+
+        setTimeout(() => {
+          io.to(pending.playerA.socketId).emit("match_accepted", payloadForA)
+          io.to(pending.playerB.socketId).emit("match_accepted", payloadForB)
+        }, START_COUNTDOWN_SECONDS * 1000)
       } else {
         await redis.set(`pending:${matchId}`, JSON.stringify(pending), "EX", 30)
         socket.emit("match_acceptance_waiting", { message: "Waiting for opponent to accept" })
