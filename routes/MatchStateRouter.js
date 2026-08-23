@@ -2,6 +2,7 @@ import express from "express"
 import {
   createMatch,
   fetchMatchState,
+  fetchMatchResult,
   fetchMatchWithTimer,
   updateSubmission,
   updateAIUsage,
@@ -16,8 +17,9 @@ const router = express.Router()
 router.post("/create",        authMiddleware, createMatch)
 router.get("/active/me",      authMiddleware, getMyActiveMatch)
 router.get("/debug/active",   authMiddleware, debugActiveMatch)
-router.get("/:matchId",       authMiddleware, fetchMatchState)
-router.get("/:matchId/timer", authMiddleware, fetchMatchWithTimer)
+router.get("/:matchId",        authMiddleware, fetchMatchState)
+router.get("/:matchId/result", authMiddleware, fetchMatchResult)
+router.get("/:matchId/timer",  authMiddleware, fetchMatchWithTimer)
 router.post("/submission",    authMiddleware, updateSubmission)
 router.post("/ai-usage",      authMiddleware, updateAIUsage)
 router.post("/end",           authMiddleware, endMatch)

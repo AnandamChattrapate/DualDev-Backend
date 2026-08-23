@@ -3,13 +3,26 @@ import {config} from 'dotenv'
 config()
 const getGroqClient = () => new Groq({ apiKey: process.env.GROQ_API_KEY })
 
+const JUDGE_TIMEOUT_MS = 10_000
+
+// The SDK has no built-in request timeout, and a rate-limited or otherwise
+// unresponsive Groq call would otherwise hang handleMatchEnded indefinitely —
+// match-end processing (and therefore the result screen) would never
+// complete for either player. Race it against a timeout so a slow/rate-limited
+// call always falls through to the heuristic fallback in judgeMatch's catch,
+// the same as an outright API error.
 const callGroqAI = async ({ messages }) => {
   const groq = getGroqClient()
-  const completion = await groq.chat.completions.create({
-    messages,
-    model:       "openai/gpt-oss-120b", // llama-3.3-70b-versatile was retired from this account (404 model_not_found)
-    temperature: 0.3,
-  })
+  const completion = await Promise.race([
+    groq.chat.completions.create({
+      messages,
+      model:       "openai/gpt-oss-120b", // llama-3.3-70b-versatile was retired from this account (404 model_not_found)
+      temperature: 0.3,
+    }),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Groq call timed out after ${JUDGE_TIMEOUT_MS}ms`)), JUDGE_TIMEOUT_MS)
+    ),
+  ])
   return completion.choices[0]?.message?.content || ""
 }
 
@@ -84,7 +97,8 @@ Respond ONLY with valid JSON in this exact format:
     }
 
   } catch (err) {
-    console.log("judgeMatch error:", err.message)
+    const rateLimited = err?.status === 429
+    console.log(`judgeMatch error${rateLimited ? " (rate limited)" : ""}:`, err.message)
     const winner =
       playerA.testsPassed > playerB.testsPassed ? playerA.userId :
       playerB.testsPassed > playerA.testsPassed ? playerB.userId :

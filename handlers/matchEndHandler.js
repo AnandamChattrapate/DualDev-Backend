@@ -63,6 +63,14 @@ export const handleMatchEnded = async ({ matchId, playerData, io }) => {
     })
     console.log(`[matchEnd:${matchId}] judgeMatch result: winner=${aiResult.winner}`)
 
+    const elapsed = (Date.now() - matchState.startedAt) / 1000
+
+    const [statsA, statsB] = await Promise.all([
+      updateUserStats(matchState.playerA, aiResult.winner, elapsed, matchState.problem?.id),
+      updateUserStats(matchState.playerB, aiResult.winner, elapsed, matchState.problem?.id),
+    ])
+    console.log(`[matchEnd:${matchId}] updateUserStats: A=${JSON.stringify(statsA)} B=${JSON.stringify(statsB)}`)
+
     await finishMatch({ matchId, winner: aiResult.winner })
     console.log(`[matchEnd:${matchId}] finishMatch OK`)
 
@@ -73,11 +81,15 @@ export const handleMatchEnded = async ({ matchId, playerData, io }) => {
           user:   matchState.playerA.userId,
           result: aiResult.winner === matchState.playerA.userId ? "won"
                 : aiResult.winner === "draw" ? "draw" : "lost",
+          ratingBefore: statsA?.ratingBefore ?? null,
+          ratingAfter:  statsA?.ratingAfter  ?? null,
         },
         {
           user:   matchState.playerB.userId,
           result: aiResult.winner === matchState.playerB.userId ? "won"
                 : aiResult.winner === "draw" ? "draw" : "lost",
+          ratingBefore: statsB?.ratingBefore ?? null,
+          ratingAfter:  statsB?.ratingAfter  ?? null,
         },
       ],
       problem:    matchState.problem?.id || null,
@@ -88,14 +100,6 @@ export const handleMatchEnded = async ({ matchId, playerData, io }) => {
       finishedAt: new Date(),
     })
     console.log(`[matchEnd:${matchId}] MatchModel.create OK, _id=${doc._id}`)
-
-    const elapsed = (Date.now() - matchState.startedAt) / 1000
-
-    const [statsA, statsB] = await Promise.all([
-      updateUserStats(matchState.playerA, aiResult.winner, elapsed, matchState.problem?.id),
-      updateUserStats(matchState.playerB, aiResult.winner, elapsed, matchState.problem?.id),
-    ])
-    console.log(`[matchEnd:${matchId}] updateUserStats: A=${JSON.stringify(statsA)} B=${JSON.stringify(statsB)}`)
 
     const payload = {
       winnerId: aiResult.winner,

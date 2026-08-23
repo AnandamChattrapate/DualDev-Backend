@@ -9,6 +9,7 @@ import {
 } from "../services/matchStateService.js"
 import matchmakingRedis from "../config/matchmakingRedis.js"
 import { ProblemModel } from "../models/ProblemModel.js"
+import { MatchModel } from "../models/MatchModel.js"
 import UserModel from "../models/UserModel.js"
 
 // Returns 403 if the authenticated user isn't one of the two players
@@ -50,6 +51,86 @@ export const fetchMatchState = async (req, res, next) => {
 
     console.log(`[fetchMatchState] match:${matchId} found, status=${match.status}, winner=${match.winner}`)
     res.json({ success: true, match })
+  } catch (err) {
+    next(err)
+  }
+}
+
+/* Authoritative final result for the result screen.
+   The Redis match:{id} key has a TTL, so it is gone for anyone who reloads
+   the result page later — that used to strand the page on its spinner and
+   then a "couldn't load" error even though the match was finished and
+   stored. Read Redis first (it carries the rich per-player data), then fall
+   back to the persisted MatchModel document, which always survives.
+   Always reports `finished` explicitly so the client can stop loading even
+   when no winner could be determined. */
+export const fetchMatchResult = async (req, res, next) => {
+  try {
+    const { matchId } = req.params
+    const userId = req.user.userId
+
+    const [state, doc] = await Promise.all([
+      getMatchState(matchId),
+      MatchModel.findOne({ matchId }).populate("players.user", "username rating"),
+    ])
+
+    if (!state && !doc) {
+      return res.status(404).json({ success: false, message: "Match not found" })
+    }
+
+    // Authorize against whichever source we have.
+    const docPlayerIds = (doc?.players || []).map((p) => p.user?._id?.toString()).filter(Boolean)
+    const authorized = (state && requirePlayer(state, userId)) || docPlayerIds.includes(userId)
+    if (!authorized) {
+      return res.status(403).json({ success: false, message: "Not your match" })
+    }
+
+    // Neither source says finished yet — tell the client to keep waiting
+    // rather than treating it as a failure.
+    const finished = doc?.status === "finished" || state?.status === "finished"
+    if (!finished) {
+      return res.json({ success: true, result: { finished: false } })
+    }
+
+    // Merge: Redis carries the rich per-player data (tests, code, language)
+    // but not aiReview; the Mongo doc carries aiReview and usernames but not
+    // per-player test data. Either may be absent.
+    const players = {}
+    if (state) {
+      for (const p of [state.playerA, state.playerB]) {
+        if (!p?.userId) continue
+        players[p.userId] = {
+          userId:      p.userId,
+          testsPassed: p.testsPassed || 0,
+          totalTests:  p.totalTests  || 0,
+          language:    p.language    || null,
+          code:        p.code        || null,
+        }
+      }
+    }
+    for (const p of doc?.players || []) {
+      const id = p.user?._id?.toString()
+      if (!id) continue
+      players[id] = {
+        ...(players[id] || { userId: id }),
+        username:     p.user?.username ?? players[id]?.username ?? null,
+        result:       p.result ?? null,
+        ratingBefore: p.ratingBefore ?? null,
+        ratingAfter:  p.ratingAfter  ?? null,
+      }
+    }
+
+    return res.json({
+      success: true,
+      result: {
+        finished:   true,
+        winner:     doc?.winner ?? state?.winner ?? null,
+        aiReview:   doc?.aiReview ?? null,
+        startedAt:  doc?.startedAt  ?? (state?.startedAt  ? new Date(state.startedAt)  : null),
+        finishedAt: doc?.finishedAt ?? (state?.finishedAt ? new Date(state.finishedAt) : null),
+        players,
+      },
+    })
   } catch (err) {
     next(err)
   }

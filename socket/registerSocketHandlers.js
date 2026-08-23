@@ -62,6 +62,23 @@ export const registerSocketHandlers = (socket, io, redis) => {
   })
 
   socket.on("accept_match", async ({ matchId }) => {
+    // Both players' accept clicks typically land within milliseconds of each
+    // other. A plain get-mutate-set here is a real race: two concurrent
+    // handlers can both read acceptedBy:[], each push only their own userId,
+    // and both write back a length-1 array — neither ever sees length 2, so
+    // match_accepted silently never fires for either player. Same spinlock
+    // idiom as matchStateService.js's withMatchLock.
+    const lockKey = `accept:lock:${matchId}`
+    let acquired = false
+    for (let attempt = 0; attempt < 20 && !acquired; attempt++) {
+      acquired = await redis.set(lockKey, "1", "NX", "PX", 2000)
+      if (!acquired) await new Promise((r) => setTimeout(r, 25))
+    }
+    if (!acquired) {
+      console.error(`accept_match: could not acquire lock for match ${matchId}`)
+      return
+    }
+
     try {
       const pendingRaw = await redis.get(`pending:${matchId}`)
       if (!pendingRaw) {
@@ -103,6 +120,8 @@ export const registerSocketHandlers = (socket, io, redis) => {
       }
     } catch (err) {
       console.error("accept_match error:", err.message)
+    } finally {
+      await redis.del(lockKey)
     }
   })
 

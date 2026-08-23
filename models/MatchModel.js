@@ -21,6 +21,12 @@ const matchSchema = new mongoose.Schema(
           enum:    { values: ["won", "lost", "draw"], message: "Result must be won, lost, or draw" },
           default: "draw",
         },
+        // Rating is otherwise only ever delivered once over the match_result
+        // socket event — if a client reloads or the event is missed, that
+        // data is gone with no way to recover it. Persist it here so the
+        // REST result endpoint can always serve it, no matter when it's read.
+        ratingBefore: { type: Number, default: null },
+        ratingAfter:  { type: Number, default: null },
       },
     ],
 
