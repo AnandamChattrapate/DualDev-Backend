@@ -127,8 +127,11 @@ export const updatePlayerSubmission = async ({ matchId, userId, testsPassed, tot
   return withMatchLock(matchId, (matchState) => {
     const now = Date.now();
 
+    // Keep the best submission, not the latest — a player who nails it on
+    // attempt 1 and then experiments (or fat-fingers a regression) on
+    // attempt 2 shouldn't have their score drop.
     if (matchState.playerA.userId === userId) {
-      matchState.playerA.testsPassed     = testsPassed;
+      matchState.playerA.testsPassed     = Math.max(matchState.playerA.testsPassed || 0, testsPassed);
       matchState.playerA.totalTests      = totalTests;
       matchState.playerA.submitted       = true;
       matchState.playerA.submissionCount = (matchState.playerA.submissionCount || 0) + 1;
@@ -136,7 +139,7 @@ export const updatePlayerSubmission = async ({ matchId, userId, testsPassed, tot
         matchState.playerA.timeTaken = Math.floor((now - matchState.startedAt) / 1000);
       }
     } else if (matchState.playerB.userId === userId) {
-      matchState.playerB.testsPassed     = testsPassed;
+      matchState.playerB.testsPassed     = Math.max(matchState.playerB.testsPassed || 0, testsPassed);
       matchState.playerB.totalTests      = totalTests;
       matchState.playerB.submitted       = true;
       matchState.playerB.submissionCount = (matchState.playerB.submissionCount || 0) + 1;
@@ -155,7 +158,10 @@ export const mergePlayerData = async ({ matchId, userId, code, language, testsPa
     const player = matchState.playerA.userId === userId ? matchState.playerA : matchState.playerB
     if (code !== undefined)        player.code = code
     if (language !== undefined)    player.language = language
-    if (testsPassed != null)       player.testsPassed = testsPassed
+    // Same best-not-latest rule as updatePlayerSubmission — don't let a
+    // client-reported final snapshot regress a score already recorded from
+    // an earlier, better judged submission.
+    if (testsPassed != null)       player.testsPassed = Math.max(player.testsPassed || 0, testsPassed)
     if (submissionCount != null)   player.submissionCount = submissionCount
     if (aiUsageCount != null)      player.aiUsageCount = aiUsageCount
   });
