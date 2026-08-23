@@ -26,6 +26,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.6.2",
     "nodemon": "^3.1.14",
+    "openai": "^7.5.0",
     "redis": "^5.12.1",
     "socket.io": "^4.8.3",
     "uuid": "^14.0.0"

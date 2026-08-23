@@ -165,16 +165,6 @@ export const mergePlayerData = async ({ matchId, userId, code, language, testsPa
   });
 };
 
-export const incrementAIUsage = async ({ matchId, userId }) => {
-  return withMatchLock(matchId, (matchState) => {
-    if (matchState.playerA.userId === userId) {
-      matchState.playerA.aiUsageCount = (matchState.playerA.aiUsageCount || 0) + 1;
-    } else if (matchState.playerB.userId === userId) {
-      matchState.playerB.aiUsageCount = (matchState.playerB.aiUsageCount || 0) + 1;
-    }
-  });
-};
-
 export const finishMatch = async ({ matchId, winner }) => {
   const data = await matchmakingRedis.get(`match:${matchId}`);
   if (!data) throw new Error(`Match not found: ${matchId}`);

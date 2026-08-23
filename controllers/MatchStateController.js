@@ -3,7 +3,6 @@ import {
   getMatchState,
   getMatchWithTimer,
   updatePlayerSubmission,
-  incrementAIUsage,
   finishMatch,
   getActiveMatchForUser,
 } from "../services/matchStateService.js"
@@ -169,25 +168,6 @@ export const updateSubmission = async (req, res, next) => {
 
     const updatedMatch = await updatePlayerSubmission({ matchId, userId, testsPassed, totalTests })
     res.json({ success: true, match: updatedMatch })
-  } catch (err) {
-    next(err)
-  }
-}
-
-export const updateAIUsage = async (req, res, next) => {
-  try {
-    const { matchId } = req.body
-    const userId = req.user.userId
-
-    const match = await getMatchState(matchId)
-    if (!match) return res.status(404).json({ success: false, message: "Match not found" })
-
-    if (!requirePlayer(match, userId)) {
-      return res.status(403).json({ success: false, message: "Not your match" })
-    }
-
-    const updated = await incrementAIUsage({ matchId, userId })
-    res.json({ success: true, match: updated })
   } catch (err) {
     next(err)
   }

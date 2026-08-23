@@ -1,26 +1,58 @@
-import Groq from "groq-sdk"
-import {config} from 'dotenv'
+import OpenAI from "openai"
+import { config } from 'dotenv'
 config()
-const getGroqClient = () => new Groq({ apiKey: process.env.GROQ_API_KEY })
+
+const getJudgeClient = () => new OpenAI({
+  apiKey:  process.env.JUDGE_API,
+  baseURL: "https://api.aicredits.in/v1",
+})
 
 const JUDGE_TIMEOUT_MS = 10_000
 
+const SYSTEM_PROMPT = `You are a competitive programming judge. Evaluate two players' solutions to the same problem and decide the winner.
+
+Scoring criteria, in order of importance:
+1. Test cases passed (most important)
+2. Fewer submissions is better
+3. Faster solve time is better
+4. Code quality and efficiency
+
+Respond ONLY with valid JSON in this exact format, no markdown fences, no extra text:
+{
+  "winner": "playerA" or "playerB" or "draw",
+  "reasoning": "2-3 sentence explanation of why this player won",
+  "playerAReview": {
+    "strengths": "what player A did well",
+    "improvements": "what player A could improve",
+    "complexity": "time and space complexity of their solution"
+  },
+  "playerBReview": {
+    "strengths": "what player B did well",
+    "improvements": "what player B could improve",
+    "complexity": "time and space complexity of their solution"
+  },
+  "optimalSolution": "brief description of the optimal approach for this problem"
+}`
+
 // The SDK has no built-in request timeout, and a rate-limited or otherwise
-// unresponsive Groq call would otherwise hang handleMatchEnded indefinitely —
+// unresponsive judge call would otherwise hang handleMatchEnded indefinitely —
 // match-end processing (and therefore the result screen) would never
 // complete for either player. Race it against a timeout so a slow/rate-limited
 // call always falls through to the heuristic fallback in judgeMatch's catch,
 // the same as an outright API error.
-const callGroqAI = async ({ messages }) => {
-  const groq = getGroqClient()
+const callJudgeAI = async ({ prompt }) => {
+  const client = getJudgeClient()
   const completion = await Promise.race([
-    groq.chat.completions.create({
-      messages,
-      model:       "openai/gpt-oss-120b", // llama-3.3-70b-versatile was retired from this account (404 model_not_found)
-      temperature: 0.3,
+    client.chat.completions.create({
+      model: "openai/gpt-5-nano",
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user",   content: prompt },
+      ],
+      temperature: 0.1,
     }),
     new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`Groq call timed out after ${JUDGE_TIMEOUT_MS}ms`)), JUDGE_TIMEOUT_MS)
+      setTimeout(() => reject(new Error(`Judge call timed out after ${JUDGE_TIMEOUT_MS}ms`)), JUDGE_TIMEOUT_MS)
     ),
   ])
   return completion.choices[0]?.message?.content || ""
@@ -45,15 +77,12 @@ export const judgeMatch = async ({ playerA, playerB, problem }) => {
   }
 
   try {
-    const prompt = `You are a competitive programming judge. Evaluate these two solutions and decide the winner.
-
-Problem: ${problem.title} (${problem.difficulty})
+    const prompt = `Problem: ${problem.title} (${problem.difficulty})
 
 Player A:
 - Language: ${playerA.language || "unknown"}
 - Tests Passed: ${playerA.testsPassed}/${playerA.totalTests}
 - Submissions: ${playerA.submissionCount}
-- AI Usage: ${playerA.aiUsageCount}
 - Time Taken: ${playerA.timeTaken ? playerA.timeTaken + "s" : "did not solve"}
 - Code:
 ${playerA.code || "No code submitted"}
@@ -62,38 +91,11 @@ Player B:
 - Language: ${playerB.language || "unknown"}
 - Tests Passed: ${playerB.testsPassed}/${playerB.totalTests}
 - Submissions: ${playerB.submissionCount}
-- AI Usage: ${playerB.aiUsageCount}
 - Time Taken: ${playerB.timeTaken ? playerB.timeTaken + "s" : "did not solve"}
 - Code:
-${playerB.code || "No code submitted"}
+${playerB.code || "No code submitted"}`
 
-Scoring criteria (in order of importance):
-1. Test cases passed (most important)
-2. Fewer submissions is better
-3. Less AI usage is better
-4. Faster solve time is better
-5. Code quality and efficiency
-
-Respond ONLY with valid JSON in this exact format:
-{
-  "winner": "playerA" or "playerB" or "draw",
-  "reasoning": "2-3 sentence explanation of why this player won",
-  "playerAReview": {
-    "strengths": "what player A did well",
-    "improvements": "what player A could improve",
-    "complexity": "time and space complexity of their solution"
-  },
-  "playerBReview": {
-    "strengths": "what player B did well",
-    "improvements": "what player B could improve",
-    "complexity": "time and space complexity of their solution"
-  },
-  "optimalSolution": "brief description of the optimal approach for this problem"
-}`
-
-    const response = await callGroqAI({
-      messages: [{ role: "user", content: prompt }]
-    })
+    const response = await callJudgeAI({ prompt })
 
     const cleaned = response.replace(/```json|```/g, "").trim()
     const result  = JSON.parse(cleaned)

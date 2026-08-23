@@ -5,7 +5,6 @@ import {
   fetchMatchResult,
   fetchMatchWithTimer,
   updateSubmission,
-  updateAIUsage,
   endMatch,
   getMyActiveMatch,
   debugActiveMatch,
@@ -21,7 +20,6 @@ router.get("/:matchId",        authMiddleware, fetchMatchState)
 router.get("/:matchId/result", authMiddleware, fetchMatchResult)
 router.get("/:matchId/timer",  authMiddleware, fetchMatchWithTimer)
 router.post("/submission",    authMiddleware, updateSubmission)
-router.post("/ai-usage",      authMiddleware, updateAIUsage)
 router.post("/end",           authMiddleware, endMatch)
 
 export const MatchStateRouter = router

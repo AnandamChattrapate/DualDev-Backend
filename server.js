@@ -7,7 +7,6 @@ import cors from 'cors'
 import { config } from 'dotenv'
 import Redis from 'ioredis'
 import jwt from 'jsonwebtoken'
-import { AIRouter } from './routes/AIRouter.js'
 import statsRoutes from './routes/statsRoutes.js'
 import { initializeStats } from './controllers/statsController.js'
 import { UserRouter } from './routes/UserRouter.js'
@@ -117,7 +116,6 @@ app.use("/api/match",        MatchStateRouter)
 app.use("/api/matchmaking",  MatchmakingRouter)
 app.use("/api/online-users", OnlineUsersRouter)
 app.use("/api/leaderboard",  LeaderboardRouter)
-app.use('/api/ai',           AIRouter)
 app.use('/api/phrases',      PhraseRouter)
 app.use('/api/stats',        statsRoutes)
 app.use('/api/insights',     insightsRoutes)
