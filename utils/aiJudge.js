@@ -7,7 +7,13 @@ const getJudgeClient = () => new OpenAI({
   baseURL: "https://api.aicredits.in/v1",
 })
 
-const JUDGE_TIMEOUT_MS = 10_000
+// gpt-5-nano behind this proxy is a reasoning model — it burns hidden
+// reasoning tokens even on a trivial prompt (~1.5s just for "reply OK"),
+// and the real judge prompt (full problem + two players' code + JSON
+// schema instructions) needs meaningfully more of that. 10s was cutting
+// real calls off before they finished; 25s gives it room to actually
+// complete instead of falling back to the heuristic on every match.
+const JUDGE_TIMEOUT_MS = 25_000
 
 const SYSTEM_PROMPT = `You are a competitive programming judge. Evaluate two players' solutions to the same problem and decide the winner.
 
