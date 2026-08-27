@@ -82,6 +82,30 @@ export const judgeMatch = async ({ playerA, playerB, problem }) => {
     }
   }
 
+  // TEMP — live AI judge calls deliberately disabled. The `openai` package
+  // and JUDGE_API were only just wired up on the VPS (was previously
+  // erroring with "Cannot find package 'openai'" on every match end because
+  // `npm install` was never re-run after that dependency was committed).
+  // Now that it's actually able to run, don't let it start silently
+  // spending real API credits on every match end until the key/cost is
+  // verified — flip this back to true once that's confirmed.
+  const AI_JUDGE_ENABLED = false
+  if (!AI_JUDGE_ENABLED) {
+    const winner =
+      playerA.testsPassed > playerB.testsPassed ? playerA.userId :
+      playerB.testsPassed > playerA.testsPassed ? playerB.userId :
+      "draw"
+    return {
+      winner,
+      playerAId:       playerA.userId,
+      playerBId:       playerB.userId,
+      reasoning:       "AI judge temporarily disabled — winner decided by test cases passed.",
+      playerAReview:   { strengths: "", improvements: "", complexity: "" },
+      playerBReview:   { strengths: "", improvements: "", complexity: "" },
+      optimalSolution: "",
+    }
+  }
+
   try {
     const prompt = `Problem: ${problem.title} (${problem.difficulty})
 
