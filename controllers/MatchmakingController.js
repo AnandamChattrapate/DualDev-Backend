@@ -89,7 +89,11 @@ export const createRoom = async (req, res, next) => {
       createdAt:  Date.now(),
     }
 
-    await matchmakingRedis.set(`room:${roomId}`, JSON.stringify(roomData), "EX", 300)
+    // 15 min — long enough to actually paste the ID into a chat app, wait
+    // for a friend to open it, log in if needed, and click Join. The old 5
+    // min TTL was expiring mid-share ("Room not found or expired") for any
+    // real-world back-and-forth, not just an idle room nobody came back to.
+    await matchmakingRedis.set(`room:${roomId}`, JSON.stringify(roomData), "EX", 900)
     console.log(`Room created: ${roomId} by ${username}`)
 
     return res.status(200).json({ success: true, roomId, message: "Room created — share roomId with your friend" })

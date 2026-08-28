@@ -192,10 +192,19 @@ export const registerSocketHandlers = (socket, io, redis) => {
       console.error("queue cleanup on disconnect:", err.message)
     }
 
-    // Remove socket mapping after 5s; skip if they've already reconnected
+    // Remove socket mapping after a grace period; skip if they've already
+    // reconnected. This window matters beyond the in-match "reconnecting"
+    // badge: match:created (server.js) uses the presence of socket:<userId>
+    // to decide whether a friend-room opponent is "online" before starting
+    // the match. 5s was too tight — a backgrounded tab (common while
+    // someone waits and switches away to actually paste/send the room ID)
+    // routinely takes longer than that to reconnect, so the room creator
+    // would look offline and the match would get silently cancelled right
+    // as the friend tried to join. 20s covers a normal background/reconnect
+    // cycle while still cleaning up promptly for someone actually gone.
     setTimeout(async () => {
       const currentSocketId = await redis.get(`socket:${userId}`)
       if (currentSocketId === socket.id) await redis.del(`socket:${userId}`)
-    }, 5000)
+    }, 20000)
   })
 }
