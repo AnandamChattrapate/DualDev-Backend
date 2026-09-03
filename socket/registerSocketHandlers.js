@@ -18,9 +18,27 @@ export const registerSocketHandlers = (socket, io, redis) => {
 
   socket.on("join_match", async ({ matchId }) => {
     socket.join(matchId)
+    socket.data.matchId = matchId
+    socket.data.userId  = userId
     // Also used as "reconnected" — lets the opponent flip their panel back to online
     socket.to(matchId).emit("opponent_joined", { userId })
-    socket.data.matchId = matchId
+    // If the opponent is already in the room, tell THIS socket about them
+    // too. Otherwise whoever joined second sits on "CONNECTING" until the
+    // first presence packet arrives (up to a few seconds).
+    try {
+      const room = io.sockets.adapter.rooms.get(matchId)
+      if (room) {
+        for (const sid of room) {
+          if (sid === socket.id) continue
+          const peer = io.sockets.sockets.get(sid)
+          const peerUserId = peer?.data?.userId
+          if (peerUserId && peerUserId !== userId) {
+            socket.emit("opponent_joined", { userId: peerUserId })
+            break
+          }
+        }
+      }
+    } catch { /* best-effort */ }
   })
 
   socket.on("code_change", ({ matchId, tokens }) => {
